@@ -1,0 +1,959 @@
+{
+  "datasets": [
+    {
+      "name": "8ead210e",
+      "displayName": "accidents",
+      "queryLines": [
+        "SELECT * FROM road_safety.v_accidents"
+      ]
+    },
+    {
+      "name": "6aead587",
+      "displayName": "kpi_fatal_share",
+      "queryLines": [
+        "SELECT ROUND(100.0 * SUM(CASE WHEN severity='Fatal' THEN 1 ELSE 0 END) / COUNT(*), 2) AS fatal_pct FROM road_safety.v_accidents"
+      ]
+    },
+    {
+      "name": "e5c792c6",
+      "displayName": "light_by_area",
+      "queryLines": [
+        "SELECT light_conditions, urban_rural,\n",
+        "       COUNT(*) AS accidents,\n",
+        "       ROUND(100.0 * SUM(CASE WHEN severity IN ('Fatal','Serious') THEN 1 ELSE 0 END) / COUNT(*), 2) AS fatal_or_serious_pct\n",
+        "FROM road_safety.v_accidents\n",
+        "WHERE light_conditions <> 'Data missing or out of range'\n",
+        "  AND urban_rural <> 'Unallocated'\n",
+        "GROUP BY light_conditions, urban_rural\n",
+        "ORDER BY fatal_or_serious_pct DESC"
+      ]
+    },
+    {
+      "name": "b364753c",
+      "displayName": "day_hour",
+      "queryLines": [
+        "SELECT dayofweek(accident_date) AS day_num, day_of_week, accident_hour, COUNT(*) AS accidents\r\n",
+        "FROM road_safety.v_accidents\r\n",
+        "WHERE accident_hour IS NOT NULL\r\n",
+        "GROUP BY dayofweek(accident_date), day_of_week, accident_hour"
+      ]
+    },
+    {
+      "name": "9bf781ee",
+      "displayName": "force_ranking",
+      "queryLines": [
+        "WITH force_stats AS (\r\n",
+        "  SELECT police_force,\r\n",
+        "         COUNT(*) AS accidents,\r\n",
+        "         SUM(CASE WHEN severity = 'Fatal' THEN 1 ELSE 0 END) AS fatal\r\n",
+        "  FROM road_safety.v_accidents\r\n",
+        "  GROUP BY police_force\r\n",
+        ")\r\n",
+        "SELECT police_force, accidents, fatal,\r\n",
+        "       ROUND(100.0 * fatal / accidents, 2) AS fatal_pct,\r\n",
+        "       RANK() OVER (ORDER BY 1.0 * fatal / accidents DESC) AS fatal_rank\r\n",
+        "FROM force_stats\r\n",
+        "WHERE accidents >= 10000\r\n",
+        "ORDER BY fatal_rank"
+      ]
+    },
+    {
+      "name": "cab8e2e5",
+      "displayName": "casualty_age",
+      "queryLines": [
+        "SELECT c.Age_Band_of_Casualty AS band_code, ab.label AS age_band, cc.label AS casualty_class,\r\n",
+        "       COUNT(*) AS casualties,\r\n",
+        "       ROUND(100.0 * SUM(CASE WHEN c.Casualty_Severity IN (1,2) THEN 1 ELSE 0 END) / COUNT(*), 2) AS fatal_or_serious_pct\r\n",
+        "FROM road_safety.casualties_raw c\r\n",
+        "LEFT JOIN road_safety.age_band ab       ON c.Age_Band_of_Casualty = ab.code\r\n",
+        "LEFT JOIN road_safety.casualty_class cc ON c.Casualty_Class = cc.code\r\n",
+        "GROUP BY c.Age_Band_of_Casualty, ab.label, cc.label"
+      ]
+    },
+    {
+      "name": "fatal_by_region_top5",
+      "displayName": "fatal_by_region_top5",
+      "config": {
+        "version": "1.1",
+        "source": "SELECT `local_authority` AS region,\n       COUNT_IF(`severity` = 'Fatal') AS fatal_crashes,\n       ROUND(AVG(`Latitude`), 4) AS latitude,\n       ROUND(AVG(`Longitude`), 4) AS longitude\nFROM road_safety.v_accidents WHERE `Latitude` IS NOT NULL AND `Longitude` IS NOT NULL GROUP BY `local_authority` ORDER BY fatal_crashes DESC LIMIT 5",
+        "dimensions": [
+          {
+            "name": "region",
+            "expr": "region",
+            "comment": "Local authority with the most fatal crashes"
+          },
+          {
+            "name": "fatal_crashes",
+            "expr": "fatal_crashes",
+            "comment": "Number of fatal accidents in the region (2005-2015)"
+          },
+          {
+            "name": "latitude",
+            "expr": "latitude",
+            "comment": "Average accident latitude in the region (WGS84)"
+          },
+          {
+            "name": "longitude",
+            "expr": "longitude",
+            "comment": "Average accident longitude in the region (WGS84)"
+          }
+        ],
+        "comment": "Top 5 UK local authorities by fatal crash count, with accident centroids"
+      }
+    },
+    {
+      "name": "fatal_by_region",
+      "displayName": "fatal_by_region",
+      "config": {
+        "version": "1.1",
+        "source": "SELECT `local_authority` AS region,\n       COUNT_IF(`severity` = 'Fatal') AS fatal_crashes,\n       ROUND(AVG(`Latitude`), 4) AS latitude,\n       ROUND(AVG(`Longitude`), 4) AS longitude\nFROM road_safety.v_accidents WHERE `Latitude` IS NOT NULL AND `Longitude` IS NOT NULL GROUP BY `local_authority` ORDER BY fatal_crashes DESC",
+        "dimensions": [
+          {
+            "name": "region",
+            "expr": "region",
+            "comment": "Local authority"
+          },
+          {
+            "name": "fatal_crashes",
+            "expr": "fatal_crashes",
+            "comment": "Number of fatal accidents in the region (2005-2015)"
+          },
+          {
+            "name": "latitude",
+            "expr": "latitude",
+            "comment": "Average accident latitude in the region (WGS84)"
+          },
+          {
+            "name": "longitude",
+            "expr": "longitude",
+            "comment": "Average accident longitude in the region (WGS84)"
+          }
+        ],
+        "comment": "All UK local authorities by fatal crash count, with accident centroids"
+      }
+    },
+    {
+      "name": "d188cd29",
+      "displayName": "fatal_share_map",
+      "queryLines": [
+        "SELECT local_authority,\r\n",
+        "       AVG(Latitude)  AS lat,\r\n",
+        "       AVG(Longitude) AS lon,\r\n",
+        "       COUNT(*)       AS collisions,\r\n",
+        "       SUM(CASE WHEN severity = 'Fatal' THEN 1 ELSE 0 END) AS fatal,\r\n",
+        "       ROUND(100.0 * SUM(CASE WHEN severity = 'Fatal' THEN 1 ELSE 0 END) / COUNT(*), 2) AS fatal_pct\r\n",
+        "FROM road_safety.v_accidents\r\n",
+        "WHERE Latitude IS NOT NULL AND Longitude IS NOT NULL\r\n",
+        "GROUP BY local_authority\r\n",
+        "HAVING COUNT(*) >= 2000\r\n",
+        "ORDER BY fatal_pct DESC"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "name": "4b6fa1cd",
+      "displayName": "UK-Car-Accidents",
+      "layout": [
+        {
+          "widget": {
+            "name": "522c5247",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "8ead210e",
+                  "fields": [
+                    {
+                      "name": "severity",
+                      "expression": "`severity`"
+                    },
+                    {
+                      "name": "accident_year",
+                      "expression": "`accident_year`"
+                    },
+                    {
+                      "name": "count(*)",
+                      "expression": "COUNT(`*`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "value": "Reported collisions fell by about 30% between 2005 and 2015",
+                  "fields": []
+                }
+              },
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "accident_year",
+                  "scale": {
+                    "type": "categorical",
+                    "sort": {
+                      "by": "natural-order"
+                    }
+                  }
+                },
+                "y": {
+                  "fieldName": "count(*)",
+                  "axis": {
+                    "title": "Collisions"
+                  },
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "severity",
+                  "scale": {
+                    "type": "categorical",
+                    "mappings": [
+                      {
+                        "value": "Fatal",
+                        "color": {
+                          "themeColorType": "visualizationColors",
+                          "position": 4
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 4,
+            "height": 9
+          }
+        },
+        {
+          "widget": {
+            "name": "4e8a46ca",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "8ead210e",
+                  "fields": [
+                    {
+                      "name": "count(*)",
+                      "expression": "COUNT(`*`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Total collisions"
+              },
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "count(*)",
+                  "displayName": "Total collisions"
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 0,
+            "width": 1,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "total-casualties",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "8ead210e",
+                  "fields": [
+                    {
+                      "name": "sum(Number_of_Casualties)",
+                      "expression": "SUM(`Number_of_Casualties`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "value": "Total Casualties",
+                  "fields": []
+                }
+              },
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sum(Number_of_Casualties)"
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 5,
+            "y": 0,
+            "width": 1,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "fatal-share",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "6aead587",
+                  "fields": [
+                    {
+                      "name": "sum(fatal_pct)",
+                      "expression": "SUM(`fatal_pct`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "value": "Fatal Share of collisions (%)",
+                  "fields": []
+                }
+              },
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sum(fatal_pct)"
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 0,
+            "width": 1,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "when-collisions-happen",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "b364753c",
+                  "fields": [
+                    {
+                      "name": "sum(accidents)",
+                      "expression": "SUM(`accidents`)"
+                    },
+                    {
+                      "name": "accident_hour",
+                      "expression": "`accident_hour`"
+                    },
+                    {
+                      "name": "day_of_week",
+                      "expression": "`day_of_week`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "value": "When collisions happen",
+                  "fields": []
+                }
+              },
+              "version": 3,
+              "widgetType": "heatmap",
+              "encodings": {
+                "x": {
+                  "fieldName": "accident_hour",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "y": {
+                  "fieldName": "day_of_week",
+                  "scale": {
+                    "type": "categorical",
+                    "sort": {
+                      "by": "custom-order",
+                      "orderedValues": [
+                        "Monday",
+                        "Tuesday",
+                        "Wednesday",
+                        "Thursday",
+                        "Friday",
+                        "Saturday",
+                        "Sunday"
+                      ]
+                    }
+                  }
+                },
+                "color": {
+                  "fieldName": "sum(accidents)",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 9,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "police-forces",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "9bf781ee",
+                  "fields": [
+                    {
+                      "name": "police_force",
+                      "expression": "`police_force`"
+                    },
+                    {
+                      "name": "accidents",
+                      "expression": "`accidents`"
+                    },
+                    {
+                      "name": "fatal",
+                      "expression": "`fatal`"
+                    },
+                    {
+                      "name": "fatal_pct",
+                      "expression": "`fatal_pct`"
+                    },
+                    {
+                      "name": "fatal_rank",
+                      "expression": "`fatal_rank`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "value": "Fatal share of collisions by police force (forces with 10,000+ collisions)",
+                  "fields": []
+                }
+              },
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "police_force",
+                    "headerAlignment": "left"
+                  },
+                  {
+                    "fieldName": "accidents",
+                    "headerAlignment": "right"
+                  },
+                  {
+                    "fieldName": "fatal",
+                    "headerAlignment": "right"
+                  },
+                  {
+                    "fieldName": "fatal_pct",
+                    "headerAlignment": "right"
+                  },
+                  {
+                    "fieldName": "fatal_rank",
+                    "headerAlignment": "right"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 9,
+            "width": 6,
+            "height": 15
+          }
+        },
+        {
+          "widget": {
+            "name": "who-is-affected",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "cab8e2e5",
+                  "fields": [
+                    {
+                      "name": "casualty_class",
+                      "expression": "`casualty_class`"
+                    },
+                    {
+                      "name": "age_band",
+                      "expression": "`age_band`"
+                    },
+                    {
+                      "name": "sum(fatal_or_serious_pct)",
+                      "expression": "SUM(`fatal_or_serious_pct`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "value": "Who is affected",
+                  "fields": []
+                }
+              },
+              "version": 3,
+              "mark": {
+                "layout": "group"
+              },
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "age_band",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "fieldName": "sum(fatal_or_serious_pct)",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "casualty_class",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 15,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "accident-year",
+            "queries": [
+              {
+                "name": "dashboards/01f1cfa45cfe1c1d80101a0ffc980f7e/datasets/01f1cfa69a68158992305a2aa02cf8be_accident_year",
+                "query": {
+                  "datasetName": "8ead210e",
+                  "fields": [
+                    {
+                      "name": "accident_year",
+                      "expression": "`accident_year`"
+                    },
+                    {
+                      "name": "accident_year_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "value": "Accident Year",
+                  "fields": []
+                }
+              },
+              "widgetType": "filter-single-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "accident_year",
+                    "queryName": "dashboards/01f1cfa45cfe1c1d80101a0ffc980f7e/datasets/01f1cfa69a68158992305a2aa02cf8be_accident_year"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 7,
+            "y": 0,
+            "width": 2,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "05815bbc",
+            "queries": [
+              {
+                "name": "dashboards/01f1cfa45cfe1c1d80101a0ffc980f7e/datasets/01f1cfa69a68158992305a2aa02cf8be_severity",
+                "query": {
+                  "datasetName": "8ead210e",
+                  "fields": [
+                    {
+                      "name": "severity",
+                      "expression": "`severity`"
+                    },
+                    {
+                      "name": "severity_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "value": "Severity",
+                  "fields": []
+                }
+              },
+              "widgetType": "filter-single-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "severity",
+                    "queryName": "dashboards/01f1cfa45cfe1c1d80101a0ffc980f7e/datasets/01f1cfa69a68158992305a2aa02cf8be_severity"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 7,
+            "y": 1,
+            "width": 2,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "9694c01c",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "fatal_by_region_top5",
+                  "fields": [
+                    {
+                      "name": "region",
+                      "expression": "`region`"
+                    },
+                    {
+                      "name": "latitude",
+                      "expression": "`latitude`"
+                    },
+                    {
+                      "name": "longitude",
+                      "expression": "`longitude`"
+                    },
+                    {
+                      "name": "fatal_crashes",
+                      "expression": "`fatal_crashes`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Top regions by fatal crashes"
+              },
+              "version": 2,
+              "widgetType": "symbol-map",
+              "encodings": {
+                "coordinates": {
+                  "coordinateType": "longitude-latitude",
+                  "latitude": {
+                    "fieldName": "latitude"
+                  },
+                  "longitude": {
+                    "fieldName": "longitude"
+                  }
+                },
+                "color": {
+                  "fieldName": "region",
+                  "legend": {
+                    "position": "bottom"
+                  },
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "size": {
+                  "fieldName": "fatal_crashes",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "extra": [
+                  {
+                    "fieldName": "fatal_crashes"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 21,
+            "width": 6,
+            "height": 14
+          }
+        },
+        {
+          "widget": {
+            "name": "87d4288d",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "d188cd29",
+                  "fields": [
+                    {
+                      "name": "fatal_pct",
+                      "expression": "`fatal_pct`"
+                    },
+                    {
+                      "name": "lat",
+                      "expression": "`lat`"
+                    },
+                    {
+                      "name": "lon",
+                      "expression": "`lon`"
+                    },
+                    {
+                      "name": "local_authority",
+                      "expression": "`local_authority`"
+                    },
+                    {
+                      "name": "collisions",
+                      "expression": "`collisions`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "value": "% of collisions that were fatal, 2005-2015, districts with 2,000+ collisions",
+                  "fields": []
+                }
+              },
+              "version": 2,
+              "widgetType": "symbol-map",
+              "encodings": {
+                "coordinates": {
+                  "coordinateType": "longitude-latitude",
+                  "latitude": {
+                    "fieldName": "lat"
+                  },
+                  "longitude": {
+                    "fieldName": "lon"
+                  }
+                },
+                "color": {
+                  "fieldName": "fatal_pct",
+                  "scale": {
+                    "type": "quantitative",
+                    "colorRamp": {
+                      "mode": "scheme",
+                      "scheme": "reds"
+                    }
+                  }
+                },
+                "size": {
+                  "fieldName": "collisions",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "extra": [
+                  {
+                    "fieldName": "local_authority"
+                  },
+                  {
+                    "fieldName": "collisions"
+                  },
+                  {
+                    "fieldName": "fatal_pct"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 24,
+            "width": 6,
+            "height": 11
+          }
+        },
+        {
+          "widget": {
+            "name": "386b355c",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "e5c792c6",
+                  "fields": [
+                    {
+                      "name": "urban_rural",
+                      "expression": "`urban_rural`"
+                    },
+                    {
+                      "name": "light_conditions",
+                      "expression": "`light_conditions`"
+                    },
+                    {
+                      "name": "sum(fatal_or_serious_pct)",
+                      "expression": "SUM(`fatal_or_serious_pct`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "value": "Light and location",
+                  "fields": []
+                }
+              },
+              "version": 3,
+              "mark": {
+                "layout": "group"
+              },
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "light_conditions",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "fieldName": "sum(fatal_or_serious_pct)",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "urban_rural",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 2,
+            "width": 8,
+            "height": 7
+          }
+        }
+      ],
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layoutVersion": "GRID_V1"
+    }
+  ],
+  "uiSettings": {
+    "theme": {
+      "widgetHeaderAlignment": "ALIGNMENT_UNSPECIFIED"
+    },
+    "applyModeEnabled": false
+  }
+}
