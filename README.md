@@ -2,11 +2,11 @@
 
 An end-to-end SQL project in Databricks: loading 31 CSV files into Delta tables, validating and joining them, analysing 1.78 million police-reported road collisions, and presenting the results in an AI/BI dashboard.
 
-**Dashboard preview:** [Dashboard screenshot (PDF)](Dashboard/Dashboard-Screenshot.pdf)
 
-<!-- To show the dashboard directly on this page, add a PNG to an "images" folder and uncomment the line below:
-![Dashboard overview](images/dashboard-overview.png)
--->
+
+
+![Dashboard overview](Images/dashboard-overview.png)
+
 
 ## The question
 
